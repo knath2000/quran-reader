@@ -5,7 +5,6 @@ import { gsap } from 'gsap';
 import TranslationSwitcher from './TranslationSwitcher';
 import ArabicText from '@/components/common/ArabicText';
 import { getVerseData } from '@/utils/clientCsvParser';
-import { fetchAudioBlob } from '@/services/firebase';
 
 // API endpoints for the Quran data from alquran.cloud
 const API_BASE_URL = 'https://api.alquran.cloud/v1';
@@ -304,9 +303,6 @@ const QuranView: React.FC<QuranViewProps> = ({ surahId = 2, selectedTranslation,
     isPaused: false,
     cleanup: () => {} // Initialize with empty function
   });
-  
-  // Add cache for audio blobs
-  const [audioBlobCache, setAudioBlobCache] = useState<Record<string, string>>({});
   
   // Cleanup audio resources when component unmounts
   useEffect(() => {
@@ -810,178 +806,208 @@ const QuranView: React.FC<QuranViewProps> = ({ surahId = 2, selectedTranslation,
         currentVerseId: verseNumber
       }));
       
-      console.log(`Attempting to load verse ${verseNumber} audio via Firebase function`);
+      // Initialize Firebase if needed
+      const { initializeFirebaseIfNeeded } = await import('@/utils/firebaseHelpers');
+      await initializeFirebaseIfNeeded();
       
-      // Check if we have this audio in cache
-      const cacheKey = `${surahId}_${verseNumber}`;
-      let audioSrc = audioBlobCache[cacheKey];
+      // Import the Firebase function dynamically to prevent server-side rendering issues
+      const { getQuranAudioUrl } = await import('@/firebase/functions');
       
-      if (!audioSrc) {
-        // Not in cache, fetch it using Firebase function
-        try {
-          // Fetch audio via Firebase function
-          const audioBlob = await fetchAudioBlob(surahId, verseNumber);
-          
-          // Create blob URL
-          audioSrc = URL.createObjectURL(audioBlob);
-          
-          // Store in cache
-          setAudioBlobCache(prev => ({
-            ...prev,
-            [cacheKey]: audioSrc
-          }));
-          
-          console.log(`Successfully fetched and created blob URL for audio via Firebase function`);
-        } catch (fetchError) {
-          console.error('Error fetching audio via Firebase function:', fetchError);
-          setAudioState(prev => ({
-            ...prev,
-            isLoading: false,
+      // Array of potential audio sources for verse (with Firebase Function as primary source)
+      const audioSources = [
+        // Primary source - Firebase Function with multiple fallbacks
+        getQuranAudioUrl(surahId, verseNumber),
+        
+        // Client-side fallbacks as backup
+        `https://quranaudio.pages.dev/1/${surahId}_${verseNumber}.mp3`,
+        `https://audio.recitequran.com/verse/AbdulBaset/${surahId}:${verseNumber}`,
+        `https://verse.mp3quran.net/arabic/Abdullah_Basfar/${surahId}${verseNumber}.mp3`
+      ];
+      
+      console.log(`Attempting to load verse ${verseNumber} audio with ${audioSources.length} potential sources`);
+      
+      // Use the first source initially
+      const audioUrl = audioSources[0];
+      console.log('Trying to play verse audio from Firebase Function:', audioUrl);
+      
+      // Create a new audio element with improved settings
+      const audio = new Audio();
+      audio.crossOrigin = "anonymous";
+      audio.preload = "auto";
+      
+      // Set a timeout to handle potential loading issues
+      const timeoutId = setTimeout(() => {
+        if (audioState.isLoading) {
+          console.error('Audio loading timeout');
+          setAudioState(prev => ({ 
+            ...prev, 
+            isLoading: false, 
             currentVerseId: null
           }));
-          throw new Error(`Failed to fetch audio: ${fetchError}`);
         }
-      } else {
-        console.log(`Using cached audio for ${cacheKey}`);
-      }
+      }, 10000); // 10 seconds timeout
       
-      // Validate audioSrc before proceeding
-      if (!audioSrc) {
-        throw new Error('Audio source URL is empty or invalid');
-      }
+      // Track which source we're trying
+      let currentSourceIndex = 0;
       
-      // Create new Audio element
-      const audio = new Audio();
-      
-      // Set up cleanup function that we'll use later
-      const cleanup = () => {
-        // Remove all event listeners before cleanup
-        audio.removeEventListener('canplaythrough', canPlayHandler);
-        audio.removeEventListener('error', errorHandler);
-        audio.removeEventListener('ended', endedHandler);
-        audio.pause();
-        // Clear the source
-        audio.src = '';
-        // Release the blob URL if needed
-        if (audioSrc && !audioBlobCache[cacheKey]) {
-          URL.revokeObjectURL(audioSrc);
+      // Error handler that tries the next source
+      const handleError = () => {
+        currentSourceIndex++;
+        
+        // Enhanced error logging with source type identification
+        const failedSource = audioSources[currentSourceIndex-1];
+        const sourceType = failedSource.includes('cloudfunctions.net')
+          ? 'Firebase Function'
+          : failedSource.includes('quranaudio.pages.dev') 
+            ? 'quranaudio.pages.dev' 
+            : failedSource.includes('recitequran.com')
+              ? 'recitequran.com'
+              : failedSource.includes('mp3quran.net')
+                ? 'mp3quran.net'
+                : 'other source';
+                
+        console.warn(`Audio source ${currentSourceIndex-1} (${sourceType}) failed: ${failedSource}`);
+        
+        // If we have more sources to try
+        if (currentSourceIndex < audioSources.length) {
+          const nextSource = audioSources[currentSourceIndex];
+          const nextSourceType = nextSource.includes('cloudfunctions.net')
+            ? 'Firebase Function'
+            : nextSource.includes('quranaudio.pages.dev') 
+              ? 'quranaudio.pages.dev' 
+              : nextSource.includes('recitequran.com')
+                ? 'recitequran.com'
+                : nextSource.includes('mp3quran.net')
+                  ? 'mp3quran.net'
+                  : 'other source';
+                  
+          console.log(`Trying alternate verse source ${currentSourceIndex} (${nextSourceType}): ${nextSource}`);
+          audio.src = audioSources[currentSourceIndex];
+          audio.load();
+        } else {
+          // We've tried all sources
+          clearTimeout(timeoutId);
+          console.error(`All audio sources failed for verse ${verseNumber}. Please check audio availability or network connection.`);
+          
+          // If this is part of a sequence, try to move to the next verse
+          if (isPartOfSequence) {
+            const nextVerseNumber = verseNumber + 1;
+            console.log(`All sources for verse ${verseNumber} failed, directly moving to verse ${nextVerseNumber}`);
+            
+            // First, stop any playing audio to prevent overlap
+            if (audioState.currentAudio) {
+              audioState.currentAudio.pause();
+              audioState.currentAudio.src = '';
+            }
+            
+            // Reset audio state - removed call to playNextVerseInSequence
+            setAudioState(prev => ({ 
+              ...prev, 
+              isLoading: false, 
+              isPlaying: false, 
+              isPaused: false,
+              currentVerseId: null,
+              currentAudio: null
+            }));
+          } else {
+            // Not part of a sequence, just reset the audio state
+            setAudioState(prev => ({ 
+              ...prev, 
+              isLoading: false, 
+              isPlaying: false, 
+              isPaused: false,
+              currentVerseId: null,
+              currentAudio: null
+            }));
+          }
         }
       };
       
-      // Define event handlers before attaching them
-      const errorHandler = (e: Event) => {
-        console.error('Audio error event:', e);
-        if (audio.error) {
-          console.error('Audio error code:', audio.error.code);
-          console.error('Audio error message:', audio.error.message);
-        }
+      // Add event listeners
+      audio.addEventListener('canplaythrough', () => {
+        clearTimeout(timeoutId);
+        // Log successful audio load with source identification
+        const successSource = audioSources[currentSourceIndex];
+        const sourceType = successSource.includes('cloudfunctions.net')
+          ? 'Firebase Function'
+          : successSource.includes('quranaudio.pages.dev') 
+            ? 'quranaudio.pages.dev' 
+            : successSource.includes('recitequran.com')
+              ? 'recitequran.com'
+              : successSource.includes('mp3quran.net')
+                ? 'mp3quran.net'
+                : 'other source';
+                
+        console.log(`Successfully loaded audio for verse ${verseNumber} from source: ${sourceType}`);
         
-        // Clear loading state
-        setAudioState(prev => ({ 
-          ...prev, 
-          isLoading: false, 
-          isPlaying: false, 
-          isPaused: false,
-          currentVerseId: null
-        }));
-        
-        // Clean up properly
-        cleanup();
-      };
-      
-      const canPlayHandler = () => {
-        console.log(`Audio can play through: ${cacheKey}`);
-        
-        // Update state
-        setAudioState(prev => ({ 
-          ...prev, 
-          isLoading: false, 
-          isPlaying: true, 
-          isPaused: false 
-        }));
+        setAudioState(prev => ({ ...prev, isLoading: false, isPlaying: true, isPaused: false }));
         
         // Start preloading the next verse's audio if this is part of a sequence
         if (isPartOfSequence && surah && verseNumber < surah.verses.length) {
           preloadNextVerseAudio(verseNumber + 1);
         }
         
-        // Remove this listener as it's no longer needed
-        audio.removeEventListener('canplaythrough', canPlayHandler);
+        audio.play().catch(e => {
+          console.error('Audio play error:', e);
+          handleError();
+        });
+      });
+      
+      audio.addEventListener('ended', () => {
+        console.log(`Verse ${verseNumber} audio playback complete`);
         
-        // Play audio with a small delay to ensure the src is fully processed
-        setTimeout(() => {
-          // Double-check that src is still valid before playing
-          if (audio.src) {
-            audio.play()
-              .then(() => {
-                console.log(`Audio for verse ${verseNumber} is now playing successfully`);
-              })
-              .catch(playError => {
-                console.error('Error playing audio:', playError);
-                setAudioState(prev => ({ 
-                  ...prev, 
-                  isLoading: false, 
-                  isPlaying: false, 
-                  isPaused: false,
-                  currentVerseId: null
-                }));
-                cleanup();
-              });
-          } else {
-            console.error('Cannot play audio: src attribute is empty');
-            cleanup();
-          }
-        }, 100);
-      };
+        // Reset audio state when complete (but not when part of a sequence)
+        if (!isPartOfSequence) {
+          setAudioState(prev => ({ 
+            ...prev, 
+            isPlaying: false, 
+            currentVerseId: null
+          }));
+        }
+      });
       
-      const endedHandler = () => {
-        console.log(`Audio playback ended for verse ${verseNumber}`);
-        
-        // Reset state
-        setAudioState(prev => ({ 
-          ...prev, 
-          isPlaying: false, 
-          isPaused: false, 
-          currentAudio: null, 
-          currentVerseId: null 
-        }));
-        
-        // Clean up properly
-        cleanup();
-      };
+      // Set up error handling
+      audio.addEventListener('error', () => {
+        console.error(`Error playing verse ${verseNumber} audio:`, audio.error);
+        handleError();
+      });
       
-      // IMPORTANT: First set the source, then load, then add event listeners
-      // This order is critical for proper initialization
+      // Add event listener for abort
+      audio.addEventListener('abort', () => {
+        console.warn(`Audio playback for verse ${verseNumber} aborted`);
+        clearTimeout(timeoutId);
+      });
       
-      // Set preload attribute to ensure the audio is loaded
-      audio.preload = "auto";
-      
-      // Set the source first - BEFORE adding event listeners
-      audio.src = audioSrc;
-      
-      // Explicitly load the audio
+      // Set the audio source and load it
+      audio.src = audioUrl;
       audio.load();
       
-      // Now add event listeners after source is set
-      audio.addEventListener('error', errorHandler);
-      audio.addEventListener('canplaythrough', canPlayHandler);
-      audio.addEventListener('ended', endedHandler);
+      // Create a cleanup function for event listeners
+      const cleanup = () => {
+        audio.removeEventListener('canplaythrough', () => {});
+        audio.removeEventListener('error', () => {});
+        audio.removeEventListener('ended', () => {});
+        audio.removeEventListener('abort', () => {});
+        clearTimeout(timeoutId);
+      };
       
-      // Set the current audio and cleanup function
+      // Update audio state with the new audio element and cleanup function
       setAudioState(prev => ({ 
         ...prev, 
         currentAudio: audio,
+        isPlaying: false, // Will be set to true in canplaythrough
+        isPaused: false,
         cleanup
       }));
       
     } catch (error) {
-      console.error(`Error playing verse ${verseNumber} audio:`, error);
+      console.error('Error in playVerseAudio:', error);
       setAudioState(prev => ({ 
-        ...prev, 
-        isLoading: false, 
-        isPaused: false, 
-        currentVerseId: null,
-        currentAudio: null
+        ...prev,
+        isLoading: false,
+        isPlaying: false,
+        isPaused: false,
+        currentVerseId: null
       }));
     }
   };
@@ -990,32 +1016,33 @@ const QuranView: React.FC<QuranViewProps> = ({ surahId = 2, selectedTranslation,
   const preloadNextVerseAudio = (verseNumber: number) => {
     if (!surah || verseNumber > surah.verses.length) return;
     
-    const cacheKey = `${surahId}_${verseNumber}`;
+    // Create a hidden audio element to preload the next verse
+    const preloadAudio = new Audio();
+    preloadAudio.preload = "auto";
+    preloadAudio.volume = 0; // Silent
     
-    // If already in cache, no need to preload
-    if (audioBlobCache[cacheKey]) {
-      console.log(`Audio for verse ${verseNumber} already in cache, no need to preload`);
-      return;
-    }
+    // Only use quranaudio.pages.dev with reciter ID 1
+    const preloadSources = [
+      `https://quranaudio.pages.dev/1/${surahId}_${verseNumber}.mp3`
+      // All backup sources have been removed as requested
+    ];
     
-    console.log(`Preloading verse ${verseNumber} audio in background via Firebase function`);
+    console.log(`Preloading verse ${verseNumber} audio in background from quranaudio.pages.dev`);
     
-    // Fetch in background using Firebase function
-    fetchAudioBlob(surahId, verseNumber)
-      .then(audioBlob => {
-        const blobUrl = URL.createObjectURL(audioBlob);
-        
-        // Store in cache
-        setAudioBlobCache(prev => ({
-          ...prev,
-          [cacheKey]: blobUrl
-        }));
-        
-        console.log(`Successfully preloaded audio for verse ${verseNumber}`);
-      })
-      .catch(error => {
-        console.warn(`Error preloading audio for verse ${verseNumber}:`, error);
-      });
+    // Set up error handling to try alternate sources
+    let sourceIndex = 0;
+    const tryNextSource = () => {
+      if (sourceIndex < preloadSources.length) {
+        const nextSource = preloadSources[sourceIndex];
+        console.log(`Preloading from quranaudio.pages.dev: ${nextSource}`);
+        preloadAudio.src = nextSource;
+        preloadAudio.load();
+        sourceIndex++;
+      }
+    };
+    
+    preloadAudio.addEventListener('error', tryNextSource);
+    tryNextSource();
   };
   
   // Show loading state
