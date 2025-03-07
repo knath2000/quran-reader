@@ -1,8 +1,9 @@
 @import "tailwindcss";
+@import url('https://fonts.googleapis.com/css2?family=Amiri:ital,wght@0,400;0,700;1,400;1,700&display=swap');
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: #1a1025;
+  --foreground: #f8fafc;
 }
 
 @theme inline {
@@ -12,15 +13,102 @@
   --font-mono: var(--font-geist-mono);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
-}
-
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  min-height: 100vh;
+  overflow-x: hidden;
+  background: linear-gradient(135deg, #2d1b4e 0%, #12091e 100%);
+  background-attachment: fixed;
+}
+
+/* RTL support for Arabic text */
+.rtl {
+  direction: rtl;
+  text-align: right;
+}
+
+/* Arabic text styling */
+.arabic-text {
+  font-family: 'Amiri', serif;
+  line-height: 2;
+  font-size: 1.5rem;
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.1);
+}
+
+::-webkit-scrollbar-thumb {
+  background: #4f46e5;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #7c3aed;
+}
+
+/* Smooth transitions */
+.page-transition {
+  transition: all 0.3s ease-in-out;
+}
+
+/* Focus styles for accessibility */
+:focus-visible {
+  outline: 2px solid #7e22ce;
+  outline-offset: 2px;
+}
+
+/* Custom gradient backgrounds */
+.bg-gradient-primary {
+  background: linear-gradient(135deg, #1e40af 0%, #3b82f6 100%);
+}
+
+.bg-gradient-secondary {
+  background: linear-gradient(135deg, #6b21a8 0%, #a855f7 100%);
+}
+
+.bg-gradient-accent {
+  background: linear-gradient(135deg, #4338ca 0%, #6366f1 100%);
+}
+
+.bg-gradient-midnight {
+  background: linear-gradient(135deg, #0f0d37 0%, #1e1b4b 100%);
+}
+
+/* Decorative elements */
+.decorative-dot {
+  position: relative;
+}
+
+.decorative-dot::before {
+  content: '';
+  position: absolute;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background-color: #7c3aed;
+  top: 50%;
+  left: -12px;
+  transform: translateY(-50%);
+}
+
+/* Card hover effects */
+.hover-glow:hover {
+  box-shadow: 0 0 15px rgba(139, 92, 246, 0.3);
+}
+
+/* Section dividers */
+.section-divider {
+  height: 3px;
+  background: linear-gradient(to right, transparent, #4f46e5, transparent);
+  margin: 2rem 0;
+  width: 80%;
+  margin-left: auto;
+  margin-right: auto;
 }

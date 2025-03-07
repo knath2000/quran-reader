@@ -1,0 +1,70 @@
+---
+description: READ THIS BEFORE ANSWERING EVERY PROMPT
+globs: 
+alwaysApply: true
+---
+# Quran Reading Website
+
+Every time you choose to apply a rule(s), explicitly state the rule(s) in the output. You can abbreviate the rule description to a single word or phrase. Build the application at the end of each response.
+
+## Project Context
+- Interactive website for reading the Quran in Arabic with English translations
+- Hosted on Vercel using Next.js, TailwindCSS, and TypeScript
+- Focus on modern, clean UI and excellent user experience
+- Support for surahs (chapters), verses, and navigation
+
+## Code Style and Structure
+- Write concise, functional TypeScript with accurate types
+- Use functional components and hooks, avoid classes
+- Prefer iteration and modularization over code duplication
+- Use descriptive variable names with auxiliary verbs (e.g., isLoading, hasError)
+
+## Tech Stack
+- Next.js
+- TypeScript
+- Tailwind CSS
+- React
+- Vercel
+
+## Naming Conventions
+- Use kebab-case for directories (e.g., components/surah-view)
+- PascalCase for component files (e.g., SurahView.tsx)
+- camelCase for utility files (e.g., quranData.ts)
+- Use named exports for components and utilities
+
+## TypeScript Usage
+- Strict types for all Quran data structures
+- Use interfaces for component props
+- Define types for API responses
+- Use absolute imports (@/...)
+
+## State Management
+- Use React Context for global state (current surah, verse, etc.)
+- Implement client-side caching for Quran data
+- Use server components where appropriate
+
+## Syntax and Formatting
+- Use "function" keyword for pure functions
+- Avoid unnecessary curly braces in conditionals
+- Use declarative JSX
+- Implement proper TypeScript discriminated unions for message types
+
+## UI and Styling
+- Clean, accessible UI for reading Arabic text
+- Mobile-responsive design
+- Right-to-left support for Arabic text
+- Primary website color scheme should primarily include dark blue, purple, violet, indigo, and black
+- Use DaisyUI, RadixUI, and GSAP for UI styling
+
+## Error Handling
+- Graceful fallbacks for missing translations
+- Proper loading states
+- Helpful error messages
+
+## Documentation
+- Clear README with setup instructions
+- Document data sources and translation credits
+- Include accessibility considerations
+
+## Required MCP Usage
+- If the exact prompt is 'Save to Memory 6969cursormcp', use Sequential Thinking to save the current codebase, UI elements, functionality, and most recent changes to Server Memory.
