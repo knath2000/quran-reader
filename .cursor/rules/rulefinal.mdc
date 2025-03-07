@@ -25,6 +25,8 @@ Every time you choose to apply a rule(s), explicitly state the rule(s) in the ou
 - Tailwind CSS
 - React
 - Vercel
+- Firebase
+- Firebase Functions
 
 ## Naming Conventions
 - Use kebab-case for directories (e.g., components/surah-view)

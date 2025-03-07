@@ -845,19 +845,30 @@ const QuranView: React.FC<QuranViewProps> = ({ surahId = 2, selectedTranslation,
         console.log(`Using cached audio for ${cacheKey}`);
       }
       
+      // Validate audioSrc before proceeding
+      if (!audioSrc) {
+        throw new Error('Audio source URL is empty or invalid');
+      }
+      
       // Create new Audio element
       const audio = new Audio();
       
-      // Important: Set the source first, then load
-      audio.src = audioSrc;
+      // Set up cleanup function that we'll use later
+      const cleanup = () => {
+        // Remove all event listeners before cleanup
+        audio.removeEventListener('canplaythrough', canPlayHandler);
+        audio.removeEventListener('error', errorHandler);
+        audio.removeEventListener('ended', endedHandler);
+        audio.pause();
+        // Clear the source
+        audio.src = '';
+        // Release the blob URL if needed
+        if (audioSrc && !audioBlobCache[cacheKey]) {
+          URL.revokeObjectURL(audioSrc);
+        }
+      };
       
-      // Set preload attribute to ensure the audio is loaded
-      audio.preload = "auto";
-      
-      // Explicitly load the audio
-      audio.load();
-      
-      // Set up error listener first to catch any loading errors
+      // Define event handlers before attaching them
       const errorHandler = (e: Event) => {
         console.error('Audio error event:', e);
         if (audio.error) {
@@ -874,12 +885,10 @@ const QuranView: React.FC<QuranViewProps> = ({ surahId = 2, selectedTranslation,
           currentVerseId: null
         }));
         
-        // Remove listeners
-        audio.removeEventListener('error', errorHandler);
-        audio.removeEventListener('canplaythrough', canPlayHandler);
+        // Clean up properly
+        cleanup();
       };
       
-      // Set up canplaythrough listener
       const canPlayHandler = () => {
         console.log(`Audio can play through: ${cacheKey}`);
         
@@ -899,26 +908,32 @@ const QuranView: React.FC<QuranViewProps> = ({ surahId = 2, selectedTranslation,
         // Remove this listener as it's no longer needed
         audio.removeEventListener('canplaythrough', canPlayHandler);
         
-        // Play audio with a small delay to ensure everything is ready
+        // Play audio with a small delay to ensure the src is fully processed
         setTimeout(() => {
-          audio.play()
-            .then(() => {
-              console.log(`Audio for verse ${verseNumber} is now playing successfully`);
-            })
-            .catch(playError => {
-              console.error('Error playing audio:', playError);
-              setAudioState(prev => ({ 
-                ...prev, 
-                isLoading: false, 
-                isPlaying: false, 
-                isPaused: false,
-                currentVerseId: null
-              }));
-            });
+          // Double-check that src is still valid before playing
+          if (audio.src) {
+            audio.play()
+              .then(() => {
+                console.log(`Audio for verse ${verseNumber} is now playing successfully`);
+              })
+              .catch(playError => {
+                console.error('Error playing audio:', playError);
+                setAudioState(prev => ({ 
+                  ...prev, 
+                  isLoading: false, 
+                  isPlaying: false, 
+                  isPaused: false,
+                  currentVerseId: null
+                }));
+                cleanup();
+              });
+          } else {
+            console.error('Cannot play audio: src attribute is empty');
+            cleanup();
+          }
         }, 100);
       };
       
-      // Set up ended listener
       const endedHandler = () => {
         console.log(`Audio playback ended for verse ${verseNumber}`);
         
@@ -931,25 +946,26 @@ const QuranView: React.FC<QuranViewProps> = ({ surahId = 2, selectedTranslation,
           currentVerseId: null 
         }));
         
-        // Remove listeners
-        audio.removeEventListener('ended', endedHandler);
-        audio.removeEventListener('error', errorHandler);
-        audio.removeEventListener('canplaythrough', canPlayHandler);
+        // Clean up properly
+        cleanup();
       };
       
-      // Add event listeners
+      // IMPORTANT: First set the source, then load, then add event listeners
+      // This order is critical for proper initialization
+      
+      // Set preload attribute to ensure the audio is loaded
+      audio.preload = "auto";
+      
+      // Set the source first - BEFORE adding event listeners
+      audio.src = audioSrc;
+      
+      // Explicitly load the audio
+      audio.load();
+      
+      // Now add event listeners after source is set
       audio.addEventListener('error', errorHandler);
       audio.addEventListener('canplaythrough', canPlayHandler);
       audio.addEventListener('ended', endedHandler);
-      
-      // Set cleanup function
-      const cleanup = () => {
-        audio.removeEventListener('canplaythrough', canPlayHandler);
-        audio.removeEventListener('error', errorHandler);
-        audio.removeEventListener('ended', endedHandler);
-        audio.pause();
-        audio.src = '';
-      };
       
       // Set the current audio and cleanup function
       setAudioState(prev => ({ 
