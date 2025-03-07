@@ -847,46 +847,17 @@ const QuranView: React.FC<QuranViewProps> = ({ surahId = 2, selectedTranslation,
       
       // Create new Audio element
       const audio = new Audio();
+      
+      // Important: Set the source first, then load
+      audio.src = audioSrc;
+      
+      // Set preload attribute to ensure the audio is loaded
       audio.preload = "auto";
       
-      // Set up canplaythrough listener
-      const canPlayHandler = () => {
-        console.log(`Audio can play through: ${cacheKey}`);
-        
-        // Update state
-        setAudioState(prev => ({ 
-          ...prev, 
-          isLoading: false, 
-          isPlaying: true, 
-          isPaused: false 
-        }));
-        
-        // Start preloading the next verse's audio if this is part of a sequence
-        if (isPartOfSequence && surah && verseNumber < surah.verses.length) {
-          preloadNextVerseAudio(verseNumber + 1);
-        }
-        
-        // Play audio
-        audio.play()
-          .then(() => {
-            console.log(`Audio for verse ${verseNumber} is now playing successfully`);
-          })
-          .catch(playError => {
-            console.error('Error playing audio:', playError);
-            setAudioState(prev => ({ 
-              ...prev, 
-              isLoading: false, 
-              isPlaying: false, 
-              isPaused: false,
-              currentVerseId: null
-            }));
-          });
-          
-        // Remove this listener as it's no longer needed
-        audio.removeEventListener('canplaythrough', canPlayHandler);
-      };
+      // Explicitly load the audio
+      audio.load();
       
-      // Set up error listener
+      // Set up error listener first to catch any loading errors
       const errorHandler = (e: Event) => {
         console.error('Audio error event:', e);
         if (audio.error) {
@@ -906,6 +877,45 @@ const QuranView: React.FC<QuranViewProps> = ({ surahId = 2, selectedTranslation,
         // Remove listeners
         audio.removeEventListener('error', errorHandler);
         audio.removeEventListener('canplaythrough', canPlayHandler);
+      };
+      
+      // Set up canplaythrough listener
+      const canPlayHandler = () => {
+        console.log(`Audio can play through: ${cacheKey}`);
+        
+        // Update state
+        setAudioState(prev => ({ 
+          ...prev, 
+          isLoading: false, 
+          isPlaying: true, 
+          isPaused: false 
+        }));
+        
+        // Start preloading the next verse's audio if this is part of a sequence
+        if (isPartOfSequence && surah && verseNumber < surah.verses.length) {
+          preloadNextVerseAudio(verseNumber + 1);
+        }
+        
+        // Remove this listener as it's no longer needed
+        audio.removeEventListener('canplaythrough', canPlayHandler);
+        
+        // Play audio with a small delay to ensure everything is ready
+        setTimeout(() => {
+          audio.play()
+            .then(() => {
+              console.log(`Audio for verse ${verseNumber} is now playing successfully`);
+            })
+            .catch(playError => {
+              console.error('Error playing audio:', playError);
+              setAudioState(prev => ({ 
+                ...prev, 
+                isLoading: false, 
+                isPlaying: false, 
+                isPaused: false,
+                currentVerseId: null
+              }));
+            });
+        }, 100);
       };
       
       // Set up ended listener
@@ -928,8 +938,8 @@ const QuranView: React.FC<QuranViewProps> = ({ surahId = 2, selectedTranslation,
       };
       
       // Add event listeners
-      audio.addEventListener('canplaythrough', canPlayHandler);
       audio.addEventListener('error', errorHandler);
+      audio.addEventListener('canplaythrough', canPlayHandler);
       audio.addEventListener('ended', endedHandler);
       
       // Set cleanup function
@@ -940,10 +950,6 @@ const QuranView: React.FC<QuranViewProps> = ({ surahId = 2, selectedTranslation,
         audio.pause();
         audio.src = '';
       };
-      
-      // Set the source and load
-      audio.src = audioSrc;
-      audio.load();
       
       // Set the current audio and cleanup function
       setAudioState(prev => ({ 
