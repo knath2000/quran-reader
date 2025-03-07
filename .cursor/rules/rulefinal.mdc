@@ -69,4 +69,4 @@ Every time you choose to apply a rule(s), explicitly state the rule(s) in the ou
 - Include accessibility considerations
 
 ## Required MCP Usage
-- If the exact prompt is 'Save to Memory 6969cursormcp', use Sequential Thinking to save the current codebase, UI elements, functionality, and most recent changes to Server Memory.
+- If the exact prompt is 'Save to Memory 6969cursormcp', use Sequential Thinking to save the current codebase, UI elements, functionality, most recent changes, and every line of code in every project file to Server Memory.
